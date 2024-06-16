@@ -1,0 +1,293 @@
+Backend
+Database Schema
+
+CREATE TABLE Projects (
+    project_id SERIAL PRIMARY KEY,
+    project_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    start_date DATE,
+    end_date DATE,
+    status VARCHAR(50)
+);
+
+CREATE TABLE Teams (
+    team_id SERIAL PRIMARY KEY,
+    team_name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE TeamMembers (
+    member_id SERIAL PRIMARY KEY,
+    team_id INT REFERENCES Teams(team_id),
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL
+);
+
+CREATE TABLE Tasks (
+    task_id SERIAL PRIMARY KEY,
+    project_id INT REFERENCES Projects(project_id),
+    task_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    assigned_to INT REFERENCES TeamMembers(member_id),
+    start_date DATE,
+    due_date DATE,
+    status VARCHAR(50)
+);
+
+CREATE TABLE Timelines (
+    timeline_id SERIAL PRIMARY KEY,
+    project_id INT REFERENCES Projects(project_id),
+    task_id INT REFERENCES Tasks(task_id),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50)
+);
+
+CREATE TABLE Notifications (
+    notification_id SERIAL PRIMARY KEY,
+    member_id INT REFERENCES TeamMembers(member_id),
+    message TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_status BOOLEAN DEFAULT FALSE
+);
+
+
+
+API
+
+
+const express = require('express');
+const app = express();
+const pool = require('./db'); // Assume we have a PostgreSQL connection pool
+
+app.use(express.json());
+
+app.get('/projects', async (req, res) => {
+    try {
+        const allProjects = await pool.query("SELECT * FROM Projects");
+        res.json(allProjects.rows);
+    } catch (err) {
+        console.error(err.message);
+    }
+});
+
+app.listen(5000, () => {
+    console.log("Server is running on port 5000");
+});
+
+
+
+
+
+Creating a New Project
+
+
+app.post('/projects', async (req, res) => {
+    try {
+        const { project_name, description, start_date, end_date, status } = req.body;
+        const newProject = await pool.query(
+            "INSERT INTO Projects (project_name, description, start_date, end_date, status) VALUES($1, $2, $3, $4, $5) RETURNING *",
+            [project_name, description, start_date, end_date, status]
+        );
+        res.json(newProject.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+    }
+});
+
+
+
+
+Get All Tasks for a Project
+
+
+app.get('/projects/:project_id/tasks', async (req, res) => {
+    try {
+        const { project_id } = req.params;
+        const tasks = await pool.query("SELECT * FROM Tasks WHERE project_id = $1", [project_id]);
+        res.json(tasks.rows);
+    } catch (err) {
+        console.error(err.message);
+    }
+});
+
+
+
+Assigning Task to a Member
+
+
+
+app.put('/tasks/:id/assign', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { assigned_to, due_date } = req.body;
+        const updateTask = await pool.query(
+            "UPDATE Tasks SET assigned_to = $1, due_date = $2 WHERE task_id = $3 RETURNING *",
+            [assigned_to, due_date, id]
+        );
+        res.json(updateTask.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+    }
+});
+
+
+
+
+Frontend
+
+
+
+import React, { useState, useEffect } from 'react';
+
+function ProjectList() {
+    const [projects, setProjects] = useState([]);
+
+    useEffect(() => {
+        fetch('/projects')
+            .then(response => response.json())
+            .then(data => setProjects(data));
+    }, []);
+
+    return (
+        <div>
+            <h1>Projects</h1>
+            <ul>
+                {projects.map(project => (
+                    <li key={project.project_id}>
+                        {project.project_name} - {project.status}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+export default ProjectList;
+
+
+
+Task Assignment Form
+
+
+
+import React, { useState } from 'react';
+
+function AssignTaskForm({ taskId }) {
+    const [assignedTo, setAssignedTo] = useState('');
+    const [dueDate, setDueDate] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        await fetch(`/tasks/${taskId}/assign`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ assigned_to: assignedTo, due_date: dueDate })
+        });
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <label>
+                Assign to Member ID:
+                <input type="text" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} />
+            </label>
+            <label>
+                Due Date:
+                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </label>
+            <button type="submit">Assign Task</button>
+        </form>
+    );
+}
+
+export default AssignTaskForm;
+
+
+
+Gantt Chart Component
+
+
+import React, { useState, useEffect } from 'react';
+import { GanttChart } from 'react-gantt-chart';
+
+function ProjectGantt({ projectId }) {
+    const [tasks, setTasks] = useState([]);
+
+    useEffect(() => {
+        fetch(`/projects/${projectId}/tasks`)
+            .then(response => response.json())
+            .then(data => setTasks(data));
+    }, [projectId]);
+
+    const ganttData = tasks.map(task => ({
+        id: task.task_id,
+        name: task.task_name,
+        start: new Date(task.start_date),
+        end: new Date(task.due_date),
+        progress: task.status === 'Completed' ? 100 : 0
+    }));
+
+    return (
+        <div>
+            <h1>Project Gantt Chart</h1>
+            <GanttChart tasks={ganttData} />
+        </div>
+    );
+}
+
+export default ProjectGantt;
+
+
+
+Notifications Component
+
+
+
+import React, { useState, useEffect } from 'react';
+
+function Notifications({ memberId }) {
+    const [notifications, setNotifications] = useState([]);
+
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            const response = await fetch(`/members/${memberId}/notifications`);
+            const data = await response.json();
+            setNotifications(data);
+        };
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 60000); // Poll every minute
+        return () => clearInterval(interval);
+    }, [memberId]);
+
+    const markAsRead = async (id) => {
+        await fetch(`/notifications/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ read_status: true })
+        });
+        setNotifications(notifications.filter(n => n.notification_id !== id));
+    };
+
+    return (
+        <div>
+            <h1>Notifications</h1>
+            <ul>
+                {notifications.map(notification => (
+                    <li key={notification.notification_id}>
+                        {notification.message}
+                        <button onClick={() => markAsRead(notification.notification_id)}>Mark as read</button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+export default Notifications;
+
+
+
+

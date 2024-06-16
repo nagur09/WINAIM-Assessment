@@ -1,0 +1,224 @@
+--Customers Table
+
+CREATE TABLE customers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    industry VARCHAR(255),
+    address TEXT,
+    phone VARCHAR(50),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--Contacts Table
+
+CREATE TABLE contacts (
+    id SERIAL PRIMARY KEY,
+    customer_id INT REFERENCES customers(id),
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255),
+    position VARCHAR(255),
+    phone VARCHAR(50),
+    email VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--Opportunities Table
+
+CREATE TABLE opportunities (
+    id SERIAL PRIMARY KEY,
+    customer_id INT REFERENCES customers(id),
+    name VARCHAR(255) NOT NULL,
+    stage VARCHAR(255),
+    value DECIMAL(10, 2),
+    close_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- Interactions Table
+
+CREATE TABLE interactions (
+    id SERIAL PRIMARY KEY,
+    customer_id INT REFERENCES customers(id),
+    contact_id INT REFERENCES contacts(id),
+    interaction_type VARCHAR(50), -- (e.g., call, meeting, email)
+    interaction_date TIMESTAMP,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--Backend API Development
+
+npm init -y
+npm install express sequelize pg pg-hstore body-parser
+
+
+//Basic Server and Sequelize Configuration
+
+// server.js
+const express = require('express');
+const bodyParser = require('body-parser');
+const app = express();
+const db = require('./models');
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+db.sequelize.sync().then(() => {
+    app.listen(3000, () => {
+        console.log('Server is running on port 3000');
+    });
+});
+
+module.exports = app;
+
+
+//Models Definition
+
+// models/customer.js
+module.exports = (sequelize, DataTypes) => {
+    const Customer = sequelize.define('Customer', {
+        name: DataTypes.STRING,
+        industry: DataTypes.STRING,
+        address: DataTypes.TEXT,
+        phone: DataTypes.STRING,
+        email: DataTypes.STRING
+    });
+    return Customer;
+};
+
+// Similarly, define other models: Contact, Opportunity, Interaction
+
+
+
+// routes/customer.js
+const express = require('express');
+const router = express.Router();
+const db = require('../models');
+
+router.post('/', (req, res) => {
+    db.Customer.create(req.body).then(customer => res.json(customer));
+});
+
+router.get('/', (req, res) => {
+    db.Customer.findAll().then(customers => res.json(customers));
+});
+
+router.get('/:id', (req, res) => {
+    db.Customer.findByPk(req.params.id).then(customer => res.json(customer));
+});
+
+router.put('/:id', (req, res) => {
+    db.Customer.update(req.body, { where: { id: req.params.id } }).then(() => res.sendStatus(200));
+});
+
+router.delete('/:id', (req, res) => {
+    db.Customer.destroy({ where: { id: req.params.id } }).then(() => res.sendStatus(200));
+});
+
+module.exports = router;
+
+
+
+//  Frontend Implementation
+
+npx create-react-app crm-frontend
+cd crm-frontend
+npm install axios
+
+
+// src/App.js
+import React from 'react';
+import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
+import Customers from './components/Customers';
+import CustomerDetail from './components/CustomerDetail';
+
+function App() {
+    return (
+        <Router>
+            <Switch>
+                <Route path="/" exact component={Customers} />
+                <Route path="/customer/:id" component={CustomerDetail} />
+            </Switch>
+        </Router>
+    );
+}
+
+export default App;
+
+
+//  Components
+
+
+// src/components/Customers.js
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
+function Customers() {
+    const [customers, setCustomers] = useState([]);
+
+    useEffect(() => {
+        axios.get('/api/customers').then(response => {
+            setCustomers(response.data);
+        });
+    }, []);
+
+    return (
+        <div>
+            <h1>Customers</h1>
+            <ul>
+                {customers.map(customer => (
+                    <li key={customer.id}>{customer.name}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+export default Customers;
+
+
+//CUSTOMER DETAILS
+
+// src/components/CustomerDetail.js
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useParams } from 'react-router-dom';
+
+function CustomerDetail() {
+    const { id } = useParams();
+    const [customer, setCustomer] = useState(null);
+
+    useEffect(() => {
+        axios.get(`/api/customers/${id}`).then(response => {
+            setCustomer(response.data);
+        });
+    }, [id]);
+
+    if (!customer) return <div>Loading...</div>;
+
+    return (
+        <div>
+            <h1>{customer.name}</h1>
+            <p>{customer.industry}</p>
+            <p>{customer.address}</p>
+            <p>{customer.phone}</p>
+            <p>{customer.email}</p>
+        </div>
+    );
+}
+
+export default CustomerDetail;
+
+
+
+
+

@@ -1,0 +1,56 @@
+--Create the employee table
+
+CREATE TABLE employees (
+    employee_id INT PRIMARY KEY,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    department_id INT,
+    hire_date DATE,
+    FOREIGN KEY (department_id) REFERENCES departments(department_id)
+);
+
+--Create the department table
+
+CREATE TABLE departments (
+    department_id INT PRIMARY KEY,
+    department_name VARCHAR(50)
+);
+
+--Create the salaries table
+
+CREATE TABLE salaries (
+    employee_id INT,
+    salary DECIMAL(10, 2),  -- Example: 99999.99
+    from_date DATE,
+    to_date DATE,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
+
+--Find all employees hired in the last year
+
+  SELECT *
+FROM employees
+WHERE hire_date >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR);
+
+
+--Calculate total salary expenditure for each department
+
+SELECT d.department_name, SUM(s.salary) AS total_salary_expenditure
+FROM departments d
+JOIN employees e ON d.department_id = e.department_id
+JOIN salaries s ON e.employee_id = s.employee_id
+GROUP BY d.department_name;
+
+--Find the top 5 highest-paid employees along with their department names
+
+  WITH RankedEmployees AS (
+    SELECT e.employee_id, e.first_name, e.last_name, d.department_name, s.salary,
+           RANK() OVER (ORDER BY s.salary DESC) AS salary_rank
+    FROM employees e
+    JOIN departments d ON e.department_id = d.department_id
+    JOIN salaries s ON e.employee_id = s.employee_id
+)
+SELECT employee_id, first_name, last_name, department_name, salary
+FROM RankedEmployees
+WHERE salary_rank <= 5;
